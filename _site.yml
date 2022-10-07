@@ -1,0 +1,28 @@
+---
+title: "menubar"
+author: "Marcos A. S. Fonseca"
+date: "July, 2022" 
+knit: (function(inputFile, encoding) {
+  rmarkdown::render(inputFile, encoding = encoding, output_dir = "docs") })
+output_dir: docs
+navbar:
+  left:
+    - text: "Main"
+      href: index.html
+    - text: "Figure 2"
+      href: figure2.html
+    - text: "Figure 3"
+      href: figure3.html
+    - text: "Figure 4"
+      href: figure4.html
+    - text: "Figure 5"
+      href: figure5.html
+    - text: "Figure 6"
+      href: figure6.html  
+    - text: "Figure 7"
+      href: figure7.html
+    - text: "Extended Figure 1"
+      href: extended_figure1.html  
+    - text: "Extended Figure 2"
+      href: extended_figure2.html  
+---
