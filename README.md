@@ -4,8 +4,10 @@ SUPERvised single Cell Annotation Tool
 ## Introduction
 This document contains code workflows, explaining how to perform the bioinformatics analysis described in ***A single-cell sequencing analysis of endometriosis, endometriomas, eutopic endometrial samples and uninvolved ovary tissues highlights cell populations characteristic of these tissue types. Significant transcriptional and cellular heterogeneity across tissues suggests their reprogramming is crucial in this disease***
 
+<p align="center">
+  <img src="img/annot_workflow.pdf-1.png" />
+</p>
 
-![Workflow](img/annot_workflow.pdf-1.png)
 
 ### Authors
 
