@@ -1,0 +1,184 @@
+---
+title: "Step 1"
+knit: (function(inputFile, encoding) {
+  rmarkdown::render(inputFile, encoding = encoding, output_dir = "docs") })
+
+---
+
+
+```{r include = FALSE}
+rm(list = ls())
+
+library(ComplexHeatmap)
+library(circlize)
+library(Seurat)
+#library(ggplot2)
+#library(ggrepel)
+library(dplyr)
+#library(plotly)
+#library(cowplot)
+#library(tidyr)
+#library(corrplot)
+library(RColorBrewer)
+library (pheatmap)
+
+aux.seurat = readRDS("../AtlasEndometriosis/rds/aux.seurat.rds")
+
+```
+
+### Introduction
+
+The procedures in this step aim to determine the enrichment of cell type markers in each cell cluster. Thus, the overall assumption is that the cells relationship in each group also determine the cell type specificity that characterize each cluster.
+
+#### Pre-requirements
+
+To start the procedures we consider:
+
+* set of Seurat cell clusters with a high-resolution parameter (2 - 3).
+* list of cell type markers.
+
+For this tutorial the following clusters were considered
+
+```{r include = T, eval=T, fig.align = 'center', fig.width = 10, fig.height=6, fig.align='center'}
+DimPlot(aux.seurat, reduction="umap")
+```
+
+
+#### Differential expression of genes per cluster
+
+The differential expression analysis is performed using MAST approach. It may take few hours depending on the number of cells and clusters.
+
+``` {r message=F, eval=FALSE, warning=F, fig.align='center', out.width = "80%"}
+markers <- FindAllMarkers(aux.seurat, test.use = "MAST")
+write.table(markers, file = "DEG_seurat_clusters_res3.csv", quote = F, sep = ",")
+```
+
+After calculating the DEG per cluster, lets take a look into the profile signature up to the top 100 genes per cluster.
+
+``` {r message=F, warning=F, fig.align='center', out.width = "90%"}
+markers = read.delim("files/DEG_seurat_clusters_res3.csv", sep = ",")
+
+ng = 100
+p.v = 0.05
+fc = 0
+features.deg <- markers %>%
+  filter(p_val_adj < p.v & avg_log2FC > fc) %>%
+  group_by(cluster) %>%
+  top_n(ng)
+
+aux = DotPlot(aux.seurat, features = unique(features.deg$gene))
+aux.data = aux$data
+
+data.avg.exp.scaled = data.frame(row.names = unique(features.deg$gene))
+
+for (o in unique(aux.data$id) ) {
+  aux.data.filt = aux.data[which(aux.data$id == o),]
+  rownames(aux.data.filt) <- aux.data.filt$features.plot
+  data.avg.exp.scaled = cbind(data.avg.exp.scaled, aux.data.filt[, 'avg.exp.scaled', drop=FALSE])
+}
+
+colnames(data.avg.exp.scaled) <- paste(unique(aux.data$id), " (n=", table(features.deg$cluster), ")", sep = "")
+pheatmap(data.avg.exp.scaled, 
+         show_rownames = F, 
+         main = paste0("DEG expression signature clusters (n=", length(unique(features.deg$gene)), ")"), 
+         cutree_cols = 10 )
+```
+
+#### Table of cell type marker genes
+
+``` {r message=F, warning=F, fig.align='center', out.width = "80%"}
+table.gene.markers <- data.frame(Gene=c("EPCAM", "KRT8", "KRT18", "KRT19", "KRT7", "FOXJ1"), Cell="Epithelial")
+table.gene.markers <- rbind(table.gene.markers, data.frame(Gene=c("ACTA2"), Cell="Smooth muscle"))
+table.gene.markers <- rbind(table.gene.markers, data.frame(Gene=c("DCN", "COL11A2", "FAP", "PDGFRA", "COL11A1", "COL1A1", "PDGFRB"), Cell="Fibroblast"))
+table.gene.markers <- rbind(table.gene.markers, data.frame(Gene=c("LYZ", "CD14", "MME", "C1QA", "CLEC10A"), Cell="Myeloid"))
+table.gene.markers <- rbind(table.gene.markers, data.frame(Gene=c("CLDN5", "PECAM1", "CD34", "ESAM"), Cell="Endothelial"))
+table.gene.markers <- rbind(table.gene.markers, data.frame(Gene=c("CD79A"), Cell="Plasma"))
+table.gene.markers <- rbind(table.gene.markers, data.frame(Gene=c("JCHAIN"), Cell="B Cells"))
+table.gene.markers <- rbind(table.gene.markers, data.frame(Gene=c("TYROBP", "FCGR3A"), Cell="Natural Killer"))
+table.gene.markers <- rbind(table.gene.markers, data.frame(Gene=c("TPSB2"), Cell="Mast"))
+table.gene.markers <- rbind(table.gene.markers, data.frame(Gene=c("HBB", "GYPA"), Cell="Erythrocytes"))
+table.gene.markers <- rbind(table.gene.markers, data.frame(Gene=c("CD2", "CD3D", "CD3E", "CD3G", 'CD8A', "CCL5", "PTPRC"), Cell="T Cells"))
+
+grid::grid.newpage()
+gridExtra::grid.table(table.gene.markers, rows=NULL)
+
+```
+
+Auxiliary functions to count the number of cell marker genes that are differentialy expressed in each cluster considering fold change >= 0.2 and p-value <= 0.05
+
+
+``` {r message=F, warning=F}
+
+get_markers <- function(cell) {
+  return(table.gene.markers$Gene[which(table.gene.markers$Cell == cell)])
+}
+
+count_marker_DEG <- function(table.gene.markers, deg, fc=0.2, pval=0.05) {
+
+  clusters = unique(deg$cluster)
+  counts = list()
+
+  for (x in (unique(table.gene.markers$Cell))) {
+    table = NULL
+    for (i in clusters) {
+      filt = deg[which(deg$cluster == i),]
+      if (nrow(filt) > 0) {
+        res = sum(filt$avg_log2FC >= fc & filt$p_val_adj <= pval & filt$gene %in% get_markers(cell = x))
+      }else
+        res = 0
+
+      table = rbind(table, data.frame(Cluster=i, MarkesDEG=res))
+    }
+    counts[[x]] <- table
+  }
+  return(counts)
+}
+
+```
+
+Lets now count the DEG marks from our initial list.
+
+``` {r message=F, warning=F}
+
+counts_deg = count_marker_DEG(table.gene.markers, markers, fc = 0.1)
+counts_deg = do.call(cbind, counts_deg)
+rownames(counts_deg) = counts_deg$Epithelial.Cluster
+
+```
+
+Lets normalize the counts by the number of the total corresponding markers. Visualizing the enrichment of marks in a heatmap
+
+``` {r message=F, warning=F, fig.align='center', fig.height=15, fig.width=7}
+
+row.bar = data.frame(table(Idents(aux.seurat)))
+row_ha = rowAnnotation(ClusterSize = anno_barplot(row.bar$Freq))
+
+markers.count = data.frame(table(table.gene.markers$Cell))
+markers.count = markers.count[match(colnames(counts_deg[,seq(2, ncol(counts_deg), by = 2)]), paste0(markers.count$Var1, ".MarkesDEG")),]
+markers.count$ColumnName = paste0(markers.count$Var1, " (n=", markers.count$Freq, ")")
+head(markers.count)
+
+y = counts_deg[,seq(2, ncol(counts_deg), by = 2)]
+x = markers.count$Freq
+z = (t(t(y) / x))
+
+rownames(z) = rownames(counts_deg)
+colnames(z) = markers.count$ColumnName
+head(z)
+
+ht1 = Heatmap(z,
+              na_col = "white",
+              cluster_rows = T,
+              cluster_columns = F,
+              show_row_names = T,
+              row_names_gp = gpar(fontsize = 12),
+              row_names_side = "left",
+              rect_gp = gpar(col = "black", lwd = 0.6),
+              show_column_names = T,
+              right_annotation = row_ha,
+              col = colorRamp2(c(0, mean(as.matrix(z)), max(z)), c("#FFFFFF" , "#d8b365", "#01665e"))
+
+)
+
+draw(ht1, heatmap_legend_side = "right")
+```
