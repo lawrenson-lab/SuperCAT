@@ -1,5 +1,5 @@
 ---
-title: "Step 1"
+title: "SuperCAT - Step 1"
 knit: (function(inputFile, encoding) {
   rmarkdown::render(inputFile, encoding = encoding, output_dir = "docs") })
 
@@ -9,18 +9,14 @@ knit: (function(inputFile, encoding) {
 ```{r include = FALSE}
 rm(list = ls())
 
+library(ggplot2)
 library(ComplexHeatmap)
 library(circlize)
 library(Seurat)
-#library(ggplot2)
-#library(ggrepel)
 library(dplyr)
-#library(plotly)
-#library(cowplot)
-#library(tidyr)
-#library(corrplot)
 library(RColorBrewer)
 library (pheatmap)
+library(scales)
 
 aux.seurat = readRDS("../AtlasEndometriosis/rds/aux.seurat.rds")
 
@@ -53,37 +49,6 @@ markers <- FindAllMarkers(aux.seurat, test.use = "MAST")
 write.table(markers, file = "DEG_seurat_clusters_res3.csv", quote = F, sep = ",")
 ```
 
-After calculating the DEG per cluster, lets take a look into the profile signature up to the top 100 genes per cluster.
-
-``` {r message=F, warning=F, fig.align='center', out.width = "90%"}
-markers = read.delim("files/DEG_seurat_clusters_res3.csv", sep = ",")
-
-ng = 100
-p.v = 0.05
-fc = 0
-features.deg <- markers %>%
-  filter(p_val_adj < p.v & avg_log2FC > fc) %>%
-  group_by(cluster) %>%
-  top_n(ng)
-
-aux = DotPlot(aux.seurat, features = unique(features.deg$gene))
-aux.data = aux$data
-
-data.avg.exp.scaled = data.frame(row.names = unique(features.deg$gene))
-
-for (o in unique(aux.data$id) ) {
-  aux.data.filt = aux.data[which(aux.data$id == o),]
-  rownames(aux.data.filt) <- aux.data.filt$features.plot
-  data.avg.exp.scaled = cbind(data.avg.exp.scaled, aux.data.filt[, 'avg.exp.scaled', drop=FALSE])
-}
-
-colnames(data.avg.exp.scaled) <- paste(unique(aux.data$id), " (n=", table(features.deg$cluster), ")", sep = "")
-pheatmap(data.avg.exp.scaled, 
-         show_rownames = F, 
-         main = paste0("DEG expression signature clusters (n=", length(unique(features.deg$gene)), ")"), 
-         cutree_cols = 10 )
-```
-
 #### Table of cell type marker genes
 
 ``` {r message=F, warning=F, fig.align='center', out.width = "80%"}
@@ -108,6 +73,8 @@ Auxiliary functions to count the number of cell marker genes that are differenti
 
 
 ``` {r message=F, warning=F}
+
+markers = read.delim("files/DEG_seurat_clusters_res3.csv", sep = ",")
 
 get_markers <- function(cell) {
   return(table.gene.markers$Gene[which(table.gene.markers$Cell == cell)])
@@ -148,7 +115,7 @@ rownames(counts_deg) = counts_deg$Epithelial.Cluster
 
 Lets normalize the counts by the number of the total corresponding markers. Visualizing the enrichment of marks in a heatmap
 
-``` {r message=F, warning=F, fig.align='center', fig.height=15, fig.width=7}
+``` {r message=F, warning=F, fig.align='center', fig.height=17, fig.width=8}
 
 row.bar = data.frame(table(Idents(aux.seurat)))
 row_ha = rowAnnotation(ClusterSize = anno_barplot(row.bar$Freq))
@@ -181,4 +148,87 @@ ht1 = Heatmap(z,
 )
 
 draw(ht1, heatmap_legend_side = "right")
+```
+
+
+Next, the expression of the markers can also be evaluated using Seurat dotplot function. We first change the order of the rows to match the order of the markers count clustering, obtained previously.
+
+``` {r message=F, warning=F, fig.align='center', fig.height=17, fig.width=9}
+
+aux.seurat@active.ident <- factor(aux.seurat@active.ident,
+                                  levels=rownames(z)[rev(row_order(ht1))]
+)
+
+DotPlot(object = aux.seurat, features = rev(unique(table.gene.markers$Gene))) +
+  scale_colour_gradient2(low = "#1b7837", mid = "#f7f7f7", high = "#762a83") +
+  RotatedAxis() +
+  theme(axis.text.x = element_text(size = 12))
+
+```
+
+### Cluster assignments procedures
+
+In this session we defined some rules to sistematiquely assign the cell type
+
+``` {r message=F, warning=F, fig.align='center'}
+expr.markers = DotPlot(object = aux.seurat, features = rev(unique(table.gene.markers$Gene)))
+
+expr.markers.data = expr.markers$data
+krt.genes = table.gene.markers$Gene[grep("KRT", table.gene.markers$Gene)]
+
+my_cluster_col <- data.frame(row.names = rownames(z))
+my_cluster_col$CellType = NA
+
+for (r in 1:nrow(z)) {
+
+  c = r -1
+  nmarkers = which(z[r,] > 0)
+  pct.KRT = expr.markers.data[expr.markers.data$id == c & expr.markers.data$features.plot %in% krt.genes,]
+
+  if ( (sum(pct.KRT$pct.exp > 35) > 0 &  sum(pct.KRT$avg.exp.scaled > 1) > 0) ) {
+    my_cluster_col$CellType[r] = "Epithelial"
+  } else if ( length(nmarkers) > 1  ){
+
+    nmarkers = z[r,which(z[r,] > 0)]
+
+    if ( length(grep("Smooth muscle", names(nmarkers))) > 0 ){
+
+      pos.fibro = grep("Fibroblast", names(nmarkers))
+      if ( length(pos.fibro) > 0 ) {
+        if (nmarkers[pos.fibro] > 0.25) {
+          my_cluster_col$CellType[r] = "Fibroblast"
+        }else {
+          my_cluster_col$CellType[r] = "Smooth"
+        }
+      } else {
+        marker = which.max(nmarkers)
+        my_cluster_col$CellType[r] = gsub(" .*", "", names(marker))
+      }
+
+    } else {
+      nmarkers = z[r,which(z[r,] > 0)] * markers.count$Freq[which(markers.count$ColumnName %in% names(nmarkers))]
+
+      if (length(unique(nmarkers)) == 1) {
+        nmarkers = z[r,which(z[r,] > 0)]
+        marker = which.max(nmarkers)
+      } else {
+        marker = which.max(nmarkers)
+        print("skip")
+      }
+      my_cluster_col$CellType[r] = gsub(" .*", "", names(marker))
+    }
+
+  } else if (length(nmarkers) == 1) {
+    my_cluster_col$CellType[r] = gsub(" .*", "", names(nmarkers))
+  }
+
+}
+
+my_cluster_col
+
+write.table(my_cluster_col, 
+            "files/reference_panel_clusters_assigned.cvs", 
+            sep = ",",
+            quote = FALSE)
+
 ```

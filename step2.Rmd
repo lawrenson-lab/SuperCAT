@@ -1,0 +1,112 @@
+---
+title: "SuperCAT - Step 2"
+knit: (function(inputFile, encoding) {
+  rmarkdown::render(inputFile, encoding = encoding, output_dir = "docs") })
+
+---
+
+
+```{r include = FALSE}
+rm(list = ls())
+
+library(ComplexHeatmap)
+library(circlize)
+library(Seurat)
+#library(ggplot2)
+#library(ggrepel)
+library(dplyr)
+#library(plotly)
+#library(cowplot)
+#library(tidyr)
+library(corrplot)
+library(RColorBrewer)
+library (pheatmap)
+
+aux.seurat = readRDS("../AtlasEndometriosis/rds/aux.seurat.rds")
+
+```
+
+### Introduction
+
+The procedures in this step aim to determine the enrichment of cell type markers in each cell cluster. Thus, the overall assumption is that the cells relationship in each group also determine the cell type specificity that characterize each cluster.
+
+#### Pre-requirements
+
+After calculating the DEG per cluster, lets take a look into the profile signature up to the top 100 genes per cluster.
+
+``` {r message=F, warning=F, fig.align='center', fig.height=8, fig.width=10}
+markers = read.delim("files/DEG_seurat_clusters_res3.csv", sep = ",")
+
+ng = 100
+p.v = 0.05
+fc = 0
+features.deg <- markers %>%
+  filter(p_val_adj < p.v & avg_log2FC > fc) %>%
+  group_by(cluster) %>%
+  top_n(ng)
+
+aux = DotPlot(aux.seurat, features = unique(features.deg$gene))
+aux.data = aux$data
+
+data.avg.exp.scaled = data.frame(row.names = unique(features.deg$gene))
+
+for (o in unique(aux.data$id) ) {
+  aux.data.filt = aux.data[which(aux.data$id == o),]
+  rownames(aux.data.filt) <- aux.data.filt$features.plot
+  data.avg.exp.scaled = cbind(data.avg.exp.scaled, aux.data.filt[, 'avg.exp.scaled', drop=FALSE])
+}
+
+colnames(data.avg.exp.scaled) <- paste(unique(aux.data$id), " (n=", table(features.deg$cluster), ")", sep = "")
+pheatmap(data.avg.exp.scaled, 
+         show_rownames = F, 
+         main = paste0("DEG expression signature clusters (n=", length(unique(features.deg$gene)), ")"), 
+         cutree_cols = 10 )
+
+```
+
+
+``` {r message=F, warning=F, fig.align='center',  fig.height=8, fig.width=10}
+
+my_cluster_col = read.delim("files/reference_panel_clusters_assigned.cvs", sep = ",")
+
+my_cluster_col$cor.val = NA
+my_cluster_col$cor.clus = NA
+
+cor.mat = cor(data.avg.exp.scaled)
+colnames(cor.mat) <- paste(0:113, sep = "")
+
+for (r in 1:nrow(my_cluster_col)) {
+
+  c = r -1
+  if (is.na(my_cluster_col$CellType[r]))  {
+    print(c)
+    cor.mat.filt = cor.mat[r,]
+    cor.mat.filt = cor.mat.filt[-r]
+
+    my_cluster_col$cor.val[r] = max(cor.mat.filt)
+    pos.clus = as.numeric(names(which.max(cor.mat.filt)))
+    my_cluster_col$cor.clus[r] = pos.clus
+
+    my_cluster_col$CellType[r] = my_cluster_col$CellType[(pos.clus + 1)]
+  }
+}
+
+pheatmap(cor.mat,
+         annotation_col = my_cluster_col)
+
+
+```
+
+``` {r message=F, eval=FALSE, warning=F, fig.align='center', out.width = "80%"}
+aux.seurat@active.ident <- plyr::mapvalues(x = aux.seurat@active.ident, from = rownames(my_cluster_col), to = my_cluster_col$CellType)
+aux.seurat[["active.cluster"]] <- aux.seurat@active.ident
+cluster.cols = c("#9e0142", "#abd9e9", "#abdda4", "#d53e4f", "#f46d43", "#5e4fa2", "#fdae61", "#ffffbf", "#e6f598",  "#66c2a5", "#3288bd","#6DCD59FF","#35B779FF","#1F9E89FF","#26828EFF","#31688EFF","#3E4A89FF","#482878FF","#440154FF")
+
+DimPlot(object = aux.seurat, pt.size = 0.1, cols = cluster.cols, label = T)
+```
+
+``` {r message=F, eval=TRUE, echo=F, warning=F, fig.align='center', out.width = "80%"}
+cluster.cols = c("#9e0142", "#abd9e9", "#abdda4", "#d53e4f", "#f46d43", "#5e4fa2", "#fdae61", "#ffffbf", "#e6f598",  "#66c2a5", "#3288bd","#6DCD59FF","#35B779FF","#1F9E89FF","#26828EFF","#31688EFF","#3E4A89FF","#482878FF","#440154FF")
+
+DimPlot(object = aux.seurat, pt.size = 0.1, cols = cluster.cols, label = T, group.by = "active.cluster")
+```
