@@ -24,14 +24,15 @@ aux.seurat = readRDS("../AtlasEndometriosis/rds/aux.seurat.rds")
 
 ### Introduction
 
-The procedures in this step aim to determine the enrichment of cell type markers in each cell cluster. Thus, the overall assumption is that the cells relationship in each group also determine the cell type specificity that characterize each cluster.
+The procedures in this step aim to determine the enrichment of differentially expressed cell type gene markers in each cell cluster. Thus, the overall assumption is that the cells relationship in each cluster group also determine the cell type that characterize each cluster.
 
 #### Pre-requirements
 
 To start the procedures we consider:
 
-* set of Seurat cell clusters with a high-resolution parameter (2 - 3).
+* set of Seurat cell clusters with a high-resolution parameter (resolution 2 - 3).
 * list of cell type markers.
+* DEG (one vs all) for each Seurat cluster.
 
 For this tutorial the following clusters were considered
 
@@ -49,27 +50,30 @@ markers <- FindAllMarkers(aux.seurat, test.use = "MAST")
 write.table(markers, file = "DEG_seurat_clusters_res3.csv", quote = F, sep = ",")
 ```
 
+Let's take a look at the general cell type markers considered for the assigments. Other genes marker can be included to the list.
+
 #### Table of cell type marker genes
 
-``` {r message=F, warning=F, fig.align='center', out.width = "80%"}
-table.gene.markers <- data.frame(Gene=c("EPCAM", "KRT8", "KRT18", "KRT19", "KRT7", "FOXJ1"), Cell="Epithelial")
-table.gene.markers <- rbind(table.gene.markers, data.frame(Gene=c("ACTA2"), Cell="Smooth muscle"))
-table.gene.markers <- rbind(table.gene.markers, data.frame(Gene=c("DCN", "COL11A2", "FAP", "PDGFRA", "COL11A1", "COL1A1", "PDGFRB"), Cell="Fibroblast"))
-table.gene.markers <- rbind(table.gene.markers, data.frame(Gene=c("LYZ", "CD14", "MME", "C1QA", "CLEC10A"), Cell="Myeloid"))
-table.gene.markers <- rbind(table.gene.markers, data.frame(Gene=c("CLDN5", "PECAM1", "CD34", "ESAM"), Cell="Endothelial"))
-table.gene.markers <- rbind(table.gene.markers, data.frame(Gene=c("CD79A"), Cell="Plasma"))
-table.gene.markers <- rbind(table.gene.markers, data.frame(Gene=c("JCHAIN"), Cell="B Cells"))
-table.gene.markers <- rbind(table.gene.markers, data.frame(Gene=c("TYROBP", "FCGR3A"), Cell="Natural Killer"))
-table.gene.markers <- rbind(table.gene.markers, data.frame(Gene=c("TPSB2"), Cell="Mast"))
+``` {r message=F, warning=F, fig.align='center',  fig.width = 4, fig.height=12}
+
+table.gene.markers <- data.frame(Gene=c("EPCAM", "KRT8", "KRT18", "KRT19", "KRT10", "KRT7", "FOXJ1"), Cell="Epithelial_cells")
+table.gene.markers <- rbind(table.gene.markers, data.frame(Gene=c("ACTA2"), Cell="Smooth_Muscle_cells"))
+table.gene.markers <- rbind(table.gene.markers, data.frame(Gene=c("DCN", "COL11A2", "FAP", "PDGFRA", "COL11A1", "COL1A1", "PDGFRB"), Cell="Mesenchymal_cells"))
+table.gene.markers <- rbind(table.gene.markers, data.frame(Gene=c("LYZ", "CD14", "MME", "C1QA", "CLEC10A"), Cell="Myeloid_cells"))
+table.gene.markers <- rbind(table.gene.markers, data.frame(Gene=c("CLDN5", "PECAM1", "CD34", "ESAM"), Cell="Endothelial_cells"))
+table.gene.markers <- rbind(table.gene.markers, data.frame(Gene=c("CD79A", "JCHAIN"), Cell="B/Plasma_cells"))
+#table.gene.markers <- rbind(table.gene.markers, data.frame(Gene=c("JCHAIN"), Cell="B Cells"))
+#table.gene.markers <- rbind(table.gene.markers, data.frame(Gene=c("TYROBP", "FCGR3A"), Cell="Natural Killer"))
+table.gene.markers <- rbind(table.gene.markers, data.frame(Gene=c("TPSB2"), Cell="Mast_cells"))
 table.gene.markers <- rbind(table.gene.markers, data.frame(Gene=c("HBB", "GYPA"), Cell="Erythrocytes"))
-table.gene.markers <- rbind(table.gene.markers, data.frame(Gene=c("CD2", "CD3D", "CD3E", "CD3G", 'CD8A', "CCL5", "PTPRC"), Cell="T Cells"))
+table.gene.markers <- rbind(table.gene.markers, data.frame(Gene=c("CD2", "CD3D", "CD3E", "CD3G", 'CD8A', "CCL5", "PTPRC", "TYROBP", "FCGR3A"), Cell="T/NK Cells"))
 
 grid::grid.newpage()
 gridExtra::grid.table(table.gene.markers, rows=NULL)
 
 ```
 
-Auxiliary functions to count the number of cell marker genes that are differentialy expressed in each cluster considering fold change >= 0.2 and p-value <= 0.05
+Bellow you can find auxiliary functions to count the number of cell marker genes that are differentialy expressed in each cluster considering fold change >= 0.2 and p-value <= 0.05
 
 
 ``` {r message=F, warning=F}
@@ -103,19 +107,19 @@ count_marker_DEG <- function(table.gene.markers, deg, fc=0.2, pval=0.05) {
 
 ```
 
-Lets now count the DEG marks from our initial list.
+Lets now use the functions above to count the DEG marks using our previous gene table list.
 
 ``` {r message=F, warning=F}
 
 counts_deg = count_marker_DEG(table.gene.markers, markers, fc = 0.1)
 counts_deg = do.call(cbind, counts_deg)
-rownames(counts_deg) = counts_deg$Epithelial.Cluster
+rownames(counts_deg) = counts_deg$Epithelial_cells.Cluster
 
 ```
 
-Lets normalize the counts by the number of the total corresponding markers. Visualizing the enrichment of marks in a heatmap
+In this step we normalize the counts by the number of the total markers for each corresponding cell type. 
 
-``` {r message=F, warning=F, fig.align='center', fig.height=17, fig.width=8}
+``` {r message=F, warning=F}
 
 row.bar = data.frame(table(Idents(aux.seurat)))
 row_ha = rowAnnotation(ClusterSize = anno_barplot(row.bar$Freq))
@@ -132,6 +136,12 @@ z = (t(t(y) / x))
 rownames(z) = rownames(counts_deg)
 colnames(z) = markers.count$ColumnName
 head(z)
+
+```
+
+Next, let's visualize the enrichment of marks (DEG counts proportion) as a heatmap plot.
+
+``` {r message=F, warning=F, fig.align='center', fig.height=17, fig.width=6}
 
 ht1 = Heatmap(z,
               na_col = "white",
@@ -151,16 +161,16 @@ draw(ht1, heatmap_legend_side = "right")
 ```
 
 
-Next, the expression of the markers can also be evaluated using Seurat dotplot function. We first change the order of the rows to match the order of the markers count clustering, obtained previously.
+Next, the expression of the markers can also be visualized and evaluated using Seurat `DotPlot` function. We first change the order of the rows to match the order of the non-supervised clustering obtained, obtained previously from the marker count proportion.
 
-``` {r message=F, warning=F, fig.align='center', fig.height=17, fig.width=9}
+``` {r message=F, warning=F, fig.align='center', fig.height=18, fig.width=9}
 
 aux.seurat@active.ident <- factor(aux.seurat@active.ident,
                                   levels=rownames(z)[rev(row_order(ht1))]
 )
 
 DotPlot(object = aux.seurat, features = rev(unique(table.gene.markers$Gene))) +
-  scale_colour_gradient2(low = "#1b7837", mid = "#f7f7f7", high = "#762a83") +
+  scale_colour_gradient2(low = "#2166ac", mid = "#f7f7f7", high = "#b2182b") +
   RotatedAxis() +
   theme(axis.text.x = element_text(size = 12))
 
@@ -168,7 +178,7 @@ DotPlot(object = aux.seurat, features = rev(unique(table.gene.markers$Gene))) +
 
 ### Cluster assignments procedures
 
-In this session we defined some rules to sistematiquely assign the cell type
+In this section we defined some rules to systematically assign the cell type for each cluster. The code corresponds to the workflow image in the `main` tab at the navigation menu.
 
 ``` {r message=F, warning=F, fig.align='center'}
 expr.markers = DotPlot(object = aux.seurat, features = rev(unique(table.gene.markers$Gene)))
@@ -186,19 +196,19 @@ for (r in 1:nrow(z)) {
   pct.KRT = expr.markers.data[expr.markers.data$id == c & expr.markers.data$features.plot %in% krt.genes,]
 
   if ( (sum(pct.KRT$pct.exp > 35) > 0 &  sum(pct.KRT$avg.exp.scaled > 1) > 0) ) {
-    my_cluster_col$CellType[r] = "Epithelial"
+    my_cluster_col$CellType[r] = "Epithelial_cells"
   } else if ( length(nmarkers) > 1  ){
 
     nmarkers = z[r,which(z[r,] > 0)]
 
-    if ( length(grep("Smooth muscle", names(nmarkers))) > 0 ){
+    if ( length(grep("Smooth_Muscle", names(nmarkers))) > 0 ){
 
-      pos.fibro = grep("Fibroblast", names(nmarkers))
+      pos.fibro = grep("Mesenchymal", names(nmarkers))
       if ( length(pos.fibro) > 0 ) {
         if (nmarkers[pos.fibro] > 0.25) {
-          my_cluster_col$CellType[r] = "Fibroblast"
+          my_cluster_col$CellType[r] = "Mesenchymal_cells"
         }else {
-          my_cluster_col$CellType[r] = "Smooth"
+          my_cluster_col$CellType[r] = "Smooth_Muscle_cells"
         }
       } else {
         marker = which.max(nmarkers)
@@ -213,7 +223,6 @@ for (r in 1:nrow(z)) {
         marker = which.max(nmarkers)
       } else {
         marker = which.max(nmarkers)
-        print("skip")
       }
       my_cluster_col$CellType[r] = gsub(" .*", "", names(marker))
     }
@@ -223,6 +232,12 @@ for (r in 1:nrow(z)) {
   }
 
 }
+
+```
+
+Let's now check the table of cell assignments and write the output as a .cvs file and go to the `Step 2`
+
+``` {r message=F, warning=F, fig.align='center'}
 
 my_cluster_col
 

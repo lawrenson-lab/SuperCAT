@@ -12,12 +12,7 @@ rm(list = ls())
 library(ComplexHeatmap)
 library(circlize)
 library(Seurat)
-#library(ggplot2)
-#library(ggrepel)
 library(dplyr)
-#library(plotly)
-#library(cowplot)
-#library(tidyr)
 library(corrplot)
 library(RColorBrewer)
 library (pheatmap)
@@ -28,9 +23,16 @@ aux.seurat = readRDS("../AtlasEndometriosis/rds/aux.seurat.rds")
 
 ### Introduction
 
-The procedures in this step aim to determine the enrichment of cell type markers in each cell cluster. Thus, the overall assumption is that the cells relationship in each group also determine the cell type specificity that characterize each cluster.
+The procedures in this step aim to assign the cell type for the clusters that does not show differentially expressed cell markers genes
 
 #### Pre-requirements
+
+To start the procedures we consider:
+
+* Referece cell type assignment panel from `step 1`
+* DEG (one vs all) for each Seurat cluster.
+
+#### DEG signatures for each cluster
 
 After calculating the DEG per cluster, lets take a look into the profile signature up to the top 100 genes per cluster.
 
@@ -64,6 +66,7 @@ pheatmap(data.avg.exp.scaled,
 
 ```
 
+Let's read the file containing the referece cell type assignment panel from `step 1` and identify the cluster that has no assignment. For those cases we consider the most correlated cluster, based on the gene expression signature, to assign the cell type. We performed a Pearson’s correlation procedure.
 
 ``` {r message=F, warning=F, fig.align='center',  fig.height=8, fig.width=10}
 
@@ -91,11 +94,16 @@ for (r in 1:nrow(my_cluster_col)) {
   }
 }
 
+```
+
+The correlation values are plotted as a heatmap and the columns annotation indicate the assigned cluster number.
+
+``` {r message=F, warning=F, fig.align='center',  fig.height=8, fig.width=10}
 pheatmap(cor.mat,
          annotation_col = my_cluster_col)
-
-
 ```
+
+Let's now annotate the Seurat object with the cell types assignments and plot an UMAP.
 
 ``` {r message=F, eval=FALSE, warning=F, fig.align='center', out.width = "80%"}
 aux.seurat@active.ident <- plyr::mapvalues(x = aux.seurat@active.ident, from = rownames(my_cluster_col), to = my_cluster_col$CellType)
