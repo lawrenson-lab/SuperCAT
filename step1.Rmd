@@ -201,9 +201,9 @@ for (r in 1:nrow(z)) {
 
     nmarkers = z[r,which(z[r,] > 0)]
 
-    if ( length(grep("Smooth_Muscle", names(nmarkers))) > 0 ){
+    if ( length(grep("Smooth_Muscle_cells", names(nmarkers))) > 0 ){
 
-      pos.fibro = grep("Mesenchymal", names(nmarkers))
+      pos.fibro = grep("Mesenchymal_cells", names(nmarkers))
       if ( length(pos.fibro) > 0 ) {
         if (nmarkers[pos.fibro] > 0.25) {
           my_cluster_col$CellType[r] = "Mesenchymal_cells"
